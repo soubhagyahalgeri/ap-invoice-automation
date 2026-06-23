@@ -1,0 +1,37 @@
+# 03 — Solution Architecture & Tech Stack
+
+## Pipeline
+
+```
+Invoice (image)
+   -> AI Extraction (Claude, vision: vendor, invoice #, date, line items, tax, total)
+   -> Validation & Enrichment (vendor master lookup, duplicate check, required-field check)
+   -> 2-/3-Way Matching (Invoice vs. PO, 3% amount tolerance)
+   -> Exception Routing (mismatches flagged with reason codes)
+   -> Approval Simulation (auto-approve under threshold + clean match, else route to human)
+   -> ERP Posting Mock (write to ledger with GL code)
+   -> Analytics Dashboard (STP rate, accuracy, exception trends, cycle time)
+```
+
+## Business Rules Implemented
+- **Amount tolerance:** 3% variance between invoice total and matched PO amount
+- **Non-PO auto-approval limit:** $750 — invoices without a PO reference under this amount route to auto-approval; above it, manual review
+- **Auto-approve limit:** $5,000 — matched invoices under this amount post automatically; above it, require approval regardless of match quality
+- **Duplicate detection:** same vendor + invoice number appearing more than once in the batch
+- **Vendor approval check:** invoices from vendors not on the approved vendor master are flagged, regardless of PO match quality
+
+## Tech Stack
+| Layer | Choice | Why |
+|---|---|---|
+| Extraction | Claude (vision model) | Handles varied/messy layouts without per-template OCR tuning |
+| Business logic | Vanilla JavaScript | Portable, no build step, easy to unit-test in isolation |
+| Visualization | Chart.js | Lightweight, sufficient for KPI/exception charts |
+| Data | Synthetic generator (in-app) | Reproducible, includes deliberate exception scenarios for testing |
+| UI | Single-page HTML dashboard | Demo-able, no deployment dependencies |
+
+## Known Limitations / Future Roadmap
+- No real ERP integration — posting is a mock ledger write
+- Single currency, no multi-entity/intercompany logic
+- No dedicated fraud-detection layer (e.g., bank-detail-change monitoring)
+- Live extraction call depends on Claude.ai's request proxy — a public, always-on version would need its own API key behind a backend proxy
+- Approval thresholds are illustrative, not tuned to any real organization's risk appetite

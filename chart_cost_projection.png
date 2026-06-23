@@ -1,0 +1,455 @@
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+                                 Image, PageBreak, HRFlowable, ListFlowable, ListItem, KeepTogether)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+# ---------- Palette (matches prototype dashboard) ----------
+INK = colors.HexColor("#1F2630")
+INK_SOFT = colors.HexColor("#5B6471")
+TEAL = colors.HexColor("#1F6F78")
+TEAL_SOFT = colors.HexColor("#E3EFEF")
+AMBER = colors.HexColor("#B8853A")
+AMBER_SOFT = colors.HexColor("#F6ECDC")
+RUST = colors.HexColor("#A84432")
+RUST_SOFT = colors.HexColor("#F4E3DE")
+MOSS = colors.HexColor("#4F7A56")
+MOSS_SOFT = colors.HexColor("#E6EFE5")
+LINE = colors.HexColor("#D7D9D0")
+
+styles = getSampleStyleSheet()
+styles.add(ParagraphStyle("CoverTitle", fontName="Helvetica-Bold", fontSize=26, leading=31, textColor=INK, alignment=TA_LEFT, spaceAfter=10))
+styles.add(ParagraphStyle("CoverSub", fontName="Helvetica", fontSize=13, leading=18, textColor=INK_SOFT, spaceAfter=4))
+styles.add(ParagraphStyle("H1", fontName="Helvetica-Bold", fontSize=17, leading=21, textColor=TEAL, spaceBefore=4, spaceAfter=10))
+styles.add(ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=12.5, leading=16, textColor=INK, spaceBefore=12, spaceAfter=6))
+styles.add(ParagraphStyle("Body", fontName="Helvetica", fontSize=10, leading=14.5, textColor=INK, spaceAfter=8))
+styles.add(ParagraphStyle("BodySmall", fontName="Helvetica", fontSize=8.7, leading=12.5, textColor=INK_SOFT, spaceAfter=6))
+styles.add(ParagraphStyle("BulletItem", fontName="Helvetica", fontSize=10, leading=14, textColor=INK, leftIndent=4))
+styles.add(ParagraphStyle("Caption", fontName="Helvetica-Oblique", fontSize=8.7, leading=11, textColor=INK_SOFT, alignment=TA_CENTER, spaceAfter=14))
+styles.add(ParagraphStyle("KPILabel", fontName="Helvetica-Bold", fontSize=8.3, leading=11, textColor=INK_SOFT, alignment=TA_CENTER))
+styles.add(ParagraphStyle("KPIVal", fontName="Helvetica-Bold", fontSize=18, leading=23, textColor=TEAL, alignment=TA_CENTER))
+styles.add(ParagraphStyle("Mono", fontName="Courier", fontSize=9, textColor=INK))
+
+ASSETS = "charts"
+
+def hr(color=LINE, thickness=0.8, space_before=4, space_after=12):
+    return HRFlowable(width="100%", thickness=thickness, color=color, spaceBefore=space_before, spaceAfter=space_after)
+
+def bullets(items):
+    return ListFlowable([ListItem(Paragraph(i, styles["BulletItem"]), bulletColor=TEAL) for i in items],
+                         bulletType="bullet", start="circle", leftIndent=14, spaceBefore=2, spaceAfter=10)
+
+def styled_table(data, col_widths=None, header_bg=INK, align_first_left=True, font_size=9):
+    def cell_style(is_header, is_first_col):
+        align = TA_LEFT if (align_first_left and is_first_col and not is_header) else TA_CENTER
+        if is_header:
+            return ParagraphStyle(f"th_{font_size}", fontName="Helvetica-Bold", fontSize=font_size,
+                                   leading=font_size+3.2, textColor=colors.white, alignment=TA_CENTER)
+        return ParagraphStyle(f"tc_{font_size}_{align}_{is_first_col}", fontName="Helvetica", fontSize=font_size,
+                               leading=font_size+3.4, textColor=INK, alignment=align)
+
+    wrapped = []
+    for r, row in enumerate(data):
+        new_row = []
+        for c, val in enumerate(row):
+            text = str(val).replace("\n", "<br/>")
+            new_row.append(Paragraph(text, cell_style(is_header=(r==0), is_first_col=(c==0))))
+        wrapped.append(new_row)
+
+    t = Table(wrapped, colWidths=col_widths, repeatRows=1)
+    style = [
+        ("BACKGROUND", (0,0), (-1,0), header_bg),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("GRID", (0,0), (-1,-1), 0.6, LINE),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F7F8F5")]),
+        ("TOPPADDING", (0,0), (-1,-1), 7),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("RIGHTPADDING", (0,0), (-1,-1), 7),
+    ]
+    t.setStyle(TableStyle(style))
+    return t
+
+def kpi_row(items):
+    """items: list of (label, value)"""
+    table_data = [[Paragraph(val, styles["KPIVal"]) for _, val in items],
+                  [Paragraph(label.upper(), styles["KPILabel"]) for label, _ in items]]
+    t = Table(table_data, colWidths=[(6.6*inch)/len(items)]*len(items))
+    t.setStyle(TableStyle([
+        ("ALIGN", (0,0), (-1,-1), "CENTER"),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,0), 16),
+        ("BOTTOMPADDING", (0,0), (-1,0), 2),
+        ("TOPPADDING", (0,1), (-1,1), 2),
+        ("BOTTOMPADDING", (0,1), (-1,1), 16),
+        ("BOX", (0,0), (-1,-1), 0.8, LINE),
+        ("INNERGRID", (0,0), (-1,-1), 0.5, LINE),
+        ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#FAFAF7")),
+    ]))
+    return t
+
+def footer(canvas, doc):
+    canvas.saveState()
+    canvas.setStrokeColor(LINE)
+    canvas.line(0.75*inch, 0.65*inch, letter[0]-0.75*inch, 0.65*inch)
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(INK_SOFT)
+    canvas.drawString(0.75*inch, 0.48*inch, "AI-Powered AP Invoice Processing Automation — Capstone Report")
+    canvas.drawRightString(letter[0]-0.75*inch, 0.48*inch, f"Page {doc.page}")
+    canvas.restoreState()
+
+story = []
+
+# ===================== COVER =====================
+story.append(Spacer(1, 1.6*inch))
+story.append(Paragraph("AI-Powered Accounts Payable (AP)<br/>Invoice Processing Automation", styles["CoverTitle"]))
+story.append(Paragraph("Capstone Project — End-to-End Design, Prototype & Results", styles["CoverSub"]))
+story.append(Spacer(1, 0.3*inch))
+story.append(hr(TEAL, 1.4, 0, 18))
+story.append(Paragraph("Prepared by: [Your Name]", styles["Body"]))
+story.append(Paragraph("Date: June 2026", styles["Body"]))
+story.append(Paragraph("Type: Self-directed capstone / portfolio project", styles["Body"]))
+story.append(Spacer(1, 0.5*inch))
+story.append(Paragraph(
+    "This report documents the design, build, and test results of a synthetic-data AI pipeline for "
+    "Accounts Payable invoice processing — covering project scope, current-state industry benchmarks, "
+    "solution architecture, a working prototype, measured test results, and an ROI projection.",
+    styles["Body"]))
+story.append(PageBreak())
+
+# ===================== EXECUTIVE SUMMARY =====================
+story.append(Paragraph("Executive Summary", styles["H1"]))
+story.append(Paragraph(
+    "Manual Accounts Payable processing is widely documented as slow and expensive, with industry "
+    "benchmarks citing $10\u201315+ per invoice and multi-day cycle times for organizations relying on manual "
+    "data entry and 3-way matching. This project designed and built a working prototype of an AI-powered "
+    "AP pipeline: invoices are rendered as images, read directly by Claude's vision model (no per-vendor "
+    "OCR templates), then validated, matched against purchase orders, and routed to auto-approval or human "
+    "review based on configurable business rules.", styles["Body"]))
+story.append(Paragraph(
+    "The prototype was tested against a deliberately adversarial 13-invoice synthetic batch containing "
+    "planted duplicate invoices, PO amount mismatches, an unapproved vendor, and non-PO invoices — to "
+    "verify the exception logic, not just the happy path.", styles["Body"]))
+story.append(Spacer(1, 6))
+story.append(kpi_row([
+    ("Invoices Processed", "13"),
+    ("Touchless Rate", "62%"),
+    ("Extraction Accuracy", "100%"),
+    ("Value Posted", "$8,413.97"),
+]))
+story.append(Spacer(1, 14))
+story.append(Paragraph(
+    "8 of 13 invoices were extracted, matched, and posted with zero human touch. The remaining 5 were "
+    "correctly routed — 4 to exceptions (the planted error scenarios) and 1 to manual approval (a non-PO "
+    "invoice, per policy). Modeled against published industry cost benchmarks, this run's outcome profile "
+    "projects to a <b>~72% reduction in processing cost</b> and <b>~82% reduction in processing time</b> "
+    "versus a fully manual baseline at equivalent scale. Full methodology and caveats are in Sections 6\u20137.",
+    styles["Body"]))
+story.append(PageBreak())
+
+# ===================== 1. PROJECT CHARTER =====================
+story.append(Paragraph("1. Project Charter", styles["H1"]))
+
+story.append(Paragraph("Problem Statement", styles["H2"]))
+story.append(Paragraph(
+    "Manual AP invoice processing is slow, error-prone, and labor-intensive. Costs and cycle times scale "
+    "poorly with invoice volume, and exception handling — mismatches, duplicates, missing POs — consumes "
+    "disproportionate staff time relative to the (larger) population of routine, clean invoices.", styles["Body"]))
+
+story.append(Paragraph("Objective", styles["H2"]))
+story.append(bullets([
+    "Extract invoice data via computer vision, with no template-specific OCR tuning",
+    "Validate extracted data against vendor master and duplicate-invoice records",
+    "Match invoices to purchase orders within a defined tolerance",
+    "Route only genuine exceptions to a human; auto-approve clean matches",
+    "Measure accuracy and touchless-processing rate against industry benchmarks",
+]))
+
+story.append(Paragraph("Scope", styles["H2"]))
+t = styled_table([
+    ["In Scope", "Out of Scope"],
+    ["PO-backed and non-PO invoices", "Real ERP integration"],
+    ["Single currency (USD)", "Multi-currency / multi-tax-jurisdiction logic"],
+    ["2-/3-way matching logic", "Live payment execution"],
+    ["Vendor & duplicate validation", "Dedicated fraud-detection controls"],
+    ["Exception routing & mock ERP posting", "Production-scale accuracy validation"],
+], col_widths=[3.1*inch, 3.1*inch])
+story.append(t)
+story.append(Spacer(1, 10))
+
+story.append(Paragraph("Success Metrics", styles["H2"]))
+story.append(bullets([
+    "Straight-through processing (STP) / touchless rate",
+    "Extraction field-accuracy vs. ground truth",
+    "Exception rate, broken down by reason code",
+    "Simulated cost and cycle-time savings vs. manual baseline",
+]))
+story.append(PageBreak())
+
+# ===================== 2. CURRENT STATE =====================
+story.append(Paragraph("2. Current-State Analysis & Industry Benchmarks", styles["H1"]))
+story.append(Paragraph(
+    "The figures below are external industry reference points, used only to frame this project's results "
+    "— not measurements of any specific real organization.", styles["BodySmall"]))
+
+t = styled_table([
+    ["Metric", "Manual", "Automated", "Source"],
+    ["Cost / invoice", "$10\u201315 typical;\nup to $40 heavily manual", "$1\u20135;\nbest-in-class $2\u20134", "Ardent Partners,\nAP Metrics That Matter (2025)"],
+    ["Cycle time", "~14.6 days avg.", "~3\u20135 days", "Ascend Software,\nAP Benchmarks (2025)"],
+    ["Touchless / STP rate", ">60% need\nhuman handling", "Top performers:\n60\u201380% touchless", "Ardent Partners\n(via Ascend, 2025)"],
+    ["Error rate", "Low single digits", "Sub-1% w/ ML\nextraction at scale", "Multiple AP\nresearch aggregators"],
+    ["Throughput", "~1 invoice at a time,\nserial workflow", "30+ invoices/hour", "Quadient\n(via Parseur, 2025/26)"],
+], col_widths=[1.3*inch, 1.55*inch, 1.55*inch, 1.8*inch], font_size=8.3)
+story.append(t)
+story.append(Spacer(1, 14))
+
+story.append(Paragraph("Pain Points Mapped to This Project", styles["H2"]))
+t2 = styled_table([
+    ["Pain Point", "Addressed By"],
+    ["Slow, serial data entry", "Vision-based extraction (no manual keying)"],
+    ["Inconsistent invoice formats", "Vision model instead of template-bound OCR"],
+    ["Manual 3-way matching", "Rules-based PO matching engine with tolerance thresholds"],
+    ["Duplicate payments / unapproved vendors", "Validation layer (duplicate detection, vendor approval check)"],
+    ["Exception backlog, low visibility", "Status-based queue + live analytics dashboard"],
+], col_widths=[2.6*inch, 3.6*inch], font_size=8.7)
+story.append(t2)
+story.append(PageBreak())
+
+# ===================== 3. ARCHITECTURE =====================
+story.append(Paragraph("3. Solution Architecture", styles["H1"]))
+story.append(Paragraph("Pipeline", styles["H2"]))
+pipeline_steps = [
+    "Invoice (image)",
+    "AI Extraction — Claude (vision): vendor, invoice #, date, line items, tax, total",
+    "Validation & Enrichment — vendor master lookup, duplicate check, required-field check",
+    "2-/3-Way Matching — Invoice vs. PO, 3% amount tolerance",
+    "Exception Routing — mismatches flagged with reason codes",
+    "Approval Simulation — auto-approve under threshold + clean match, else route to human",
+    "ERP Posting Mock — write to ledger with GL code",
+    "Analytics Dashboard — STP rate, accuracy, exception trends, cycle time",
+]
+for i, step in enumerate(pipeline_steps):
+    arrow = "↓" if i < len(pipeline_steps)-1 else ""
+    story.append(Paragraph(f"<b>{i+1}.</b> {step}", styles["Body"]))
+story.append(Spacer(1, 6))
+
+story.append(Paragraph("Business Rules Implemented", styles["H2"]))
+t3 = styled_table([
+    ["Rule", "Value", "Rationale"],
+    ["Amount tolerance", "3%", "Allowable variance between invoice total and matched PO amount"],
+    ["Non-PO auto-approval limit", "$750", "Low-value, no-PO invoices route to auto-approval"],
+    ["Auto-approve limit", "$5,000", "Matched invoices below this post automatically"],
+    ["Duplicate detection", "Vendor + invoice #", "Flags repeat submissions within a batch"],
+    ["Vendor approval check", "Vendor master flag", "Unapproved vendors flagged regardless of match quality"],
+], col_widths=[1.7*inch, 1.3*inch, 3.2*inch], font_size=8.5)
+story.append(t3)
+story.append(Spacer(1, 14))
+
+story.append(Paragraph("Tech Stack", styles["H2"]))
+t4 = styled_table([
+    ["Layer", "Choice", "Why"],
+    ["Extraction", "Claude (vision model)", "Handles varied/messy layouts without per-template OCR tuning"],
+    ["Business logic", "Vanilla JavaScript", "Portable, no build step, unit-testable in isolation"],
+    ["Visualization", "Chart.js", "Lightweight, sufficient for KPI/exception charts"],
+    ["Data", "Synthetic generator (in-app)", "Reproducible; includes deliberate exception scenarios"],
+    ["UI", "Single-page HTML dashboard", "Demo-able, no deployment dependencies"],
+], col_widths=[1.4*inch, 2.0*inch, 2.8*inch], font_size=8.5)
+story.append(t4)
+story.append(PageBreak())
+
+# ===================== 4. METHODOLOGY =====================
+story.append(Paragraph("4. Methodology — Synthetic Data & Testing Approach", styles["H1"]))
+story.append(Paragraph(
+    "Real invoice data was not available for this self-directed project, so a synthetic data generator was "
+    "built to produce a fresh, randomized batch on every run: a vendor master (8 vendors, one randomly "
+    "marked unapproved), a purchase order master, and a batch of invoices rendered as actual images "
+    "(not structured data fed directly to the model).", styles["Body"]))
+
+story.append(Paragraph("Visual Realism", styles["H2"]))
+story.append(bullets([
+    "<b>3 layout templates</b> — classic ledger style, modern banded header, plain-text minimal — to avoid testing extraction against a single predictable format",
+    "<b>Simulated scan noise</b> — ~20% of invoices rendered with slight rotation, contrast reduction, and grain to mimic scanned/faxed documents",
+]))
+
+story.append(Paragraph("Deliberate Exception Scenarios", styles["H2"]))
+t5 = styled_table([
+    ["Scenario", "Tests"],
+    ["Clean match", "Baseline touchless path"],
+    ["Amount mismatch (PO exists, total varies)", "Tolerance-based matching logic"],
+    ["Non-PO invoice", "Policy-based routing without a PO"],
+    ["Unapproved vendor", "Vendor master validation"],
+    ["Duplicate invoice (same vendor + invoice #)", "Duplicate detection across the batch"],
+], col_widths=[3.3*inch, 2.9*inch], font_size=8.7)
+story.append(t5)
+story.append(Spacer(1, 10))
+story.append(Paragraph(
+    "This design deliberately tests whether the pipeline correctly <i>rejects</i> bad invoices, not only "
+    "whether it processes good ones — a more meaningful test of production-readiness than a clean-data demo.",
+    styles["Body"]))
+story.append(PageBreak())
+
+# ===================== 5. RESULTS =====================
+story.append(Paragraph("5. Test Results", styles["H1"]))
+story.append(Paragraph("A single pipeline run was executed against a freshly generated 13-invoice batch.", styles["Body"]))
+
+img1 = Image(f"{ASSETS}/chart_outcome_breakdown.png", width=4.4*inch, height=3.5*inch)
+img1.hAlign = "CENTER"
+story.append(img1)
+story.append(Paragraph("Figure 1. Invoice outcome breakdown for the test run.", styles["Caption"]))
+
+t6 = styled_table([
+    ["Metric", "Result"],
+    ["Invoices in batch", "13"],
+    ["Touchless (auto-approved & posted)", "8  (62%)"],
+    ["Exceptions", "4"],
+    ["Pending manual approval", "1"],
+    ["Extraction accuracy vs. ground truth", "100%"],
+    ["Total value posted", "$8,413.97"],
+], col_widths=[3.6*inch, 2.6*inch], font_size=9.5)
+story.append(t6)
+story.append(Spacer(1, 12))
+
+story.append(Paragraph("Key Findings", styles["H2"]))
+story.append(bullets([
+    "All 4 exceptions are consistent with this batch's planted error scenarios (amount mismatch, duplicate, "
+    "unapproved vendor) — the validation and matching logic correctly intercepted every one, rather than "
+    "silently posting a bad invoice.",
+    "The 1 pending-approval invoice is a non-PO invoice correctly routed for manual review per policy, "
+    "rather than auto-posted or wrongly flagged as an error.",
+    "100% field-extraction accuracy was achieved across all 3 visual templates and the simulated scan-noise "
+    "variant — on this batch size. See Section 7 for the sample-size caveat.",
+]))
+story.append(PageBreak())
+
+# ===================== 6. ROI ANALYSIS =====================
+story.append(Paragraph("6. ROI Analysis", styles["H1"]))
+story.append(Paragraph(
+    "Cost and time figures below combine this run's actual outcome counts with explicitly stated industry-"
+    "benchmark assumptions (Section 2). They are illustrative, not a guarantee of results for any specific "
+    "organization.", styles["BodySmall"]))
+
+story.append(Paragraph("Assumptions", styles["H2"]))
+t7 = styled_table([
+    ["Assumption", "Value"],
+    ["Manual cost per invoice", "$12.50 (industry midpoint)"],
+    ["Automated cost — touchless invoice", "$2.00 (AI/compute only)"],
+    ["Automated cost — invoice needing review", "$6.00 (human review of pre-extracted data)"],
+    ["Manual time per invoice", "12 minutes"],
+    ["Automated time — touchless invoice", "1 minute"],
+    ["Automated time — invoice needing review", "4 minutes"],
+], col_widths=[3.7*inch, 2.5*inch], font_size=8.7)
+story.append(t7)
+story.append(Spacer(1, 12))
+
+story.append(Paragraph("This Batch (n=13)", styles["H2"]))
+t8 = styled_table([
+    ["", "Manual Baseline", "Automated (Actual Run)", "Savings"],
+    ["Cost", "$162.50", "$46.00", "$116.50  (71.7%)"],
+    ["Time", "156 min", "28 min", "128 min  (82.1%)"],
+], col_widths=[1.0*inch, 1.9*inch, 2.1*inch, 1.6*inch], font_size=9)
+story.append(t8)
+story.append(Spacer(1, 14))
+
+story.append(Paragraph("Extrapolated to Annual Scale", styles["H2"]))
+story.append(Paragraph("Holding this run's 62% touchless rate constant across higher volumes:", styles["BodySmall"]))
+img2 = Image(f"{ASSETS}/chart_cost_projection.png", width=5.6*inch, height=3.4*inch)
+img2.hAlign = "CENTER"
+story.append(img2)
+story.append(Paragraph("Figure 2. Projected annual processing cost at three illustrative volumes.", styles["Caption"]))
+
+img3 = Image(f"{ASSETS}/chart_time_projection.png", width=5.6*inch, height=3.4*inch)
+img3.hAlign = "CENTER"
+story.append(img3)
+story.append(Paragraph("Figure 3. Projected annual processing hours at the same volumes.", styles["Caption"]))
+
+t9 = styled_table([
+    ["Annual Volume", "Manual Cost", "Automated Cost", "Savings"],
+    ["1,000", "$12,500", "$3,538", "$8,962 (71.7%)"],
+    ["5,000", "$62,500", "$17,692", "$44,808 (71.7%)"],
+    ["12,000", "$150,000", "$42,462", "$107,538 (71.7%)"],
+], col_widths=[1.4*inch, 1.6*inch, 1.7*inch, 1.9*inch], font_size=9)
+story.append(t9)
+story.append(PageBreak())
+
+# ===================== 7. RISKS / LIMITATIONS =====================
+story.append(Paragraph("7. Risks, Controls & Limitations", styles["H1"]))
+story.append(bullets([
+    "<b>Small sample size:</b> 100% extraction accuracy was measured on 13 invoices. Production-grade "
+    "accuracy claims would require testing on hundreds of invoices across wider format, language, and "
+    "image-quality variation.",
+    "<b>Mock ERP posting:</b> the ledger write is simulated; no real ERP, GL system, or payment rail is integrated.",
+    "<b>Single currency, single entity:</b> no multi-currency, multi-tax-jurisdiction, or intercompany logic.",
+    "<b>No dedicated fraud controls:</b> e.g., no bank-detail-change monitoring or vendor-impersonation detection.",
+    "<b>Live-demo dependency:</b> the prototype's extraction call relies on Claude.ai's built-in request "
+    "proxy. A public, always-on version would require a dedicated API key behind a backend proxy.",
+    "<b>Illustrative approval thresholds:</b> the $750 / $5,000 / 3% tolerance values are reasonable "
+    "defaults, not tuned to any specific organization's risk appetite.",
+]))
+story.append(PageBreak())
+
+# ===================== 8. FUTURE ROADMAP =====================
+story.append(Paragraph("8. Future Roadmap", styles["H1"]))
+story.append(bullets([
+    "Integrate with a real ERP/accounting system (e.g., NetSuite, SAP, QuickBooks) for live GL posting",
+    "Test extraction accuracy at production scale (hundreds–thousands of invoices, multiple languages/currencies)",
+    "Add fraud-detection controls (vendor bank-detail-change alerts, anomaly detection on payment patterns)",
+    "Support multi-currency and multi-entity/intercompany invoices",
+    "Deploy a backend-hosted version with a dedicated API key for a public, always-on live demo",
+    "Add configurable approval workflows (multi-level sign-off, delegation, audit trail export)",
+]))
+
+story.append(Paragraph("9. Conclusion", styles["H1"]))
+story.append(Paragraph(
+    "This project set out to test whether an AI vision model could replace template-bound OCR in an AP "
+    "pipeline — and whether a rules-based validation/matching layer could be trusted to tell good invoices "
+    "apart from bad ones, automatically. On a deliberately adversarial test batch, the prototype extracted "
+    "every field correctly and routed every planted error to the right place: no bad invoice was silently "
+    "posted, and no clean invoice was needlessly held up. Modeled against published industry benchmarks, "
+    "this outcome profile projects to a meaningful reduction in both cost and processing time at scale. "
+    "The next step is testing at production volume to validate whether these results hold beyond a "
+    "13-invoice batch.", styles["Body"]))
+story.append(PageBreak())
+
+# ===================== REFERENCES =====================
+story.append(Paragraph("References", styles["H1"]))
+story.append(bullets([
+    "Ardent Partners. <i>AP Metrics That Matter</i>, 2025.",
+    "Ascend Software. <i>What \u2018Good\u2019 Looks Like: AP Benchmarks Every Modern Team Should Know</i>, 2025.",
+    "APQC. AP benchmarking data, 2024\u20132025 cycle.",
+    "Quadient, via Parseur. <i>AI Invoice Processing Benchmarks 2026</i>.",
+    "Lido. <i>How Much Does Invoice Processing Cost? Benchmarks for 2026</i>.",
+]))
+story.append(PageBreak())
+
+# ===================== APPENDIX =====================
+story.append(Paragraph("Appendix A — Business Rules Reference", styles["H1"]))
+story.append(t3)
+story.append(Spacer(1, 16))
+
+story.append(Paragraph("Appendix B — Data Schema Reference", styles["H1"]))
+story.append(Paragraph("Vendor Master", styles["H2"]))
+story.append(Paragraph("name, category, glCode, address, approved (bool)", styles["Mono"]))
+story.append(Spacer(1, 8))
+story.append(Paragraph("Purchase Order Master", styles["H2"]))
+story.append(Paragraph("poNumber, vendor, amount, glCode, status", styles["Mono"]))
+story.append(Spacer(1, 8))
+story.append(Paragraph("Invoice (extracted schema)", styles["H2"]))
+story.append(Paragraph(
+    "vendor, invoiceNumber, poNumber (nullable), invoiceDate, dueDate, currency,<br/>"
+    "lineItems: [description, quantity, unitPrice, amount], subtotal, taxAmount, total", styles["Mono"]))
+story.append(Spacer(1, 10))
+story.append(Paragraph(
+    "Full source code, the interactive prototype, and supporting docs are included in the accompanying "
+    "project folder (README.md, prototype/dashboard.html, src-reference/core-logic.js).", styles["BodySmall"]))
+
+doc = SimpleDocTemplate(
+    "../AP_Invoice_Automation_Capstone_Report.pdf",
+    pagesize=letter,
+    leftMargin=0.85*inch, rightMargin=0.85*inch,
+    topMargin=0.85*inch, bottomMargin=0.9*inch,
+    title="AI-Powered AP Invoice Processing Automation — Capstone Report",
+)
+doc.build(story, onFirstPage=footer, onLaterPages=footer)
+print("PDF built.")

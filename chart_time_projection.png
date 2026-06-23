@@ -1,0 +1,93 @@
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Palette matching the prototype dashboard
+TEAL = "#1F6F78"
+AMBER = "#B8853A"
+RUST = "#A84432"
+MOSS = "#4F7A56"
+INK = "#1F2630"
+INK_SOFT = "#5B6471"
+LINE = "#D7D9D0"
+
+plt.rcParams.update({
+    "font.family": "DejaVu Sans",
+    "axes.edgecolor": LINE,
+    "axes.labelcolor": INK,
+    "text.color": INK,
+    "xtick.color": INK_SOFT,
+    "ytick.color": INK_SOFT,
+})
+
+# ---------- Chart 1: Outcome breakdown (actual run) ----------
+labels = ["Posted\n(Touchless)", "Exception", "Pending\nApproval"]
+values = [8, 4, 1]
+colors = [MOSS, RUST, AMBER]
+
+fig, ax = plt.subplots(figsize=(5.2, 4.2), dpi=200)
+wedges, texts, autotexts = ax.pie(
+    values, labels=labels, colors=colors, autopct=lambda p: f"{p:.0f}%\n({int(round(p*13/100))})",
+    startangle=90, wedgeprops=dict(width=0.42, edgecolor="white", linewidth=2),
+    pctdistance=0.78, textprops={"fontsize":10, "color":INK}
+)
+for t in autotexts:
+    t.set_color("white"); t.set_fontsize(9.5); t.set_fontweight("bold")
+ax.set_title("Invoice Outcome Breakdown — Test Run (n=13)", fontsize=12, fontweight="bold", color=INK, pad=14)
+plt.tight_layout()
+plt.savefig("charts/chart_outcome_breakdown.png", transparent=True)
+plt.close()
+
+# ---------- Chart 2: Projected annual cost, manual vs automated ----------
+volumes = [1000, 5000, 12000]
+manual_costs = [12500, 62500, 150000]
+auto_costs = [3538, 17692, 42462]
+
+x = np.arange(len(volumes))
+width = 0.32
+fig, ax = plt.subplots(figsize=(6.6, 4.0), dpi=200)
+b1 = ax.bar(x - width/2, manual_costs, width, label="Manual baseline", color=AMBER)
+b2 = ax.bar(x + width/2, auto_costs, width, label="Automated pipeline", color=TEAL)
+for bars in (b1, b2):
+    for bar in bars:
+        h = bar.get_height()
+        ax.annotate(f"${h:,.0f}", (bar.get_x()+bar.get_width()/2, h), textcoords="offset points",
+                    xytext=(0,4), ha="center", fontsize=8.5, color=INK)
+ymax = max(manual_costs)*1.38
+ax.set_ylim(0, ymax)
+for i,v in enumerate(volumes):
+    savings_pct = (manual_costs[i]-auto_costs[i])/manual_costs[i]*100
+    ax.annotate(f"-{savings_pct:.0f}%", (x[i], ymax*0.82),
+                ha="center", fontsize=9.5, color=MOSS, fontweight="bold")
+ax.set_xticks(x); ax.set_xticklabels([f"{v:,}/yr" for v in volumes])
+ax.set_ylabel("Annual processing cost ($)")
+ax.set_title("Projected Annual Cost — Manual vs. Automated\n(extrapolated at this run's 62% touchless rate)", fontsize=11.5, fontweight="bold", pad=12)
+ax.spines[['top','right']].set_visible(False)
+ax.legend(frameon=False, fontsize=9.5, loc="upper left")
+plt.tight_layout()
+plt.savefig("charts/chart_cost_projection.png", transparent=True)
+plt.close()
+
+# ---------- Chart 3: Hours saved per year ----------
+manual_hours = [200, 1000, 2400]
+auto_hours = [36, 179, 431]
+fig, ax = plt.subplots(figsize=(6.6, 4.0), dpi=200)
+b1 = ax.bar(x - width/2, manual_hours, width, label="Manual baseline", color=AMBER)
+b2 = ax.bar(x + width/2, auto_hours, width, label="Automated pipeline", color=TEAL)
+for bars in (b1, b2):
+    for bar in bars:
+        h = bar.get_height()
+        ax.annotate(f"{h:,.0f}h", (bar.get_x()+bar.get_width()/2, h), textcoords="offset points",
+                    xytext=(0,4), ha="center", fontsize=8.5, color=INK)
+ax.set_xticks(x); ax.set_xticklabels([f"{v:,}/yr" for v in volumes])
+ax.set_ylabel("Processing hours / year")
+ax.set_title("Projected Annual Processing Time — Manual vs. Automated", fontsize=11.5, fontweight="bold", pad=12)
+ax.spines[['top','right']].set_visible(False)
+ax.legend(frameon=False, fontsize=9.5, loc="upper left")
+ax.set_ylim(0, max(manual_hours)*1.2)
+plt.tight_layout()
+plt.savefig("charts/chart_time_projection.png", transparent=True)
+plt.close()
+
+print("Charts generated.")
